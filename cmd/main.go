@@ -32,20 +32,20 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 }
 
 func main() {
-	// s1 := makeServer("127.0.0.1:3000", "127.0.0.1:4000", "127.0.0.1:6000")
-	s1 := makeServer("127.0.0.1:3000", "127.0.0.1:4000")
+	s1 := makeServer("127.0.0.1:3000", "127.0.0.1:4000", "127.0.0.1:6000")
+	// s1 := makeServer("127.0.0.1:3000", "127.0.0.1:4000")
 
 	s2 := makeServer("127.0.0.1:4000", "")
 
-	// s3 := makeServer("127.0.0.1:6000", "")
+	s3 := makeServer("127.0.0.1:6000", "")
 
 	go func() {
 		log.Fatal(s2.Start())
 	}()
 
-	// go func() {
-	// 	log.Fatal(s3.Start())
-	// }()
+	go func() {
+		log.Fatal(s3.Start())
+	}()
 	//
 	time.Sleep(2 * time.Second)
 	go s1.Start()
@@ -63,7 +63,7 @@ func main() {
 	var buffer bytes.Buffer
 	filename := "testfilename"
 
-	err := s1.ReadInFromRemote(filename, &buffer)
+	err := s1.GetFileRemote(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
