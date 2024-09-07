@@ -12,6 +12,7 @@ type Peer interface {
 // can be TCP, UDP, websockets ..
 type Transport interface {
 	ListenAndAccept() error
+	ListenAndAcceptSync(func(net.Conn))
 	// Consume will return a readonly channel from where the caller can read the message from another peer.
 	Consume() <-chan RPC
 	Close() error

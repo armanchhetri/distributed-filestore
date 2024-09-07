@@ -68,6 +68,26 @@ func (t *TCPTransport) Dial(addr string) error {
 	return nil
 }
 
+func (t *TCPTransport) ListenAndAcceptSync(handler func(net.Conn)) {
+	var err error
+	fmt.Printf("Listening at %v\n", t.Address)
+	t.listener, err = net.Listen("tcp", t.Address)
+	if err != nil {
+		fmt.Printf("Error on creating a connection %v\n", err)
+	}
+	for {
+		conn, err := t.listener.Accept()
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
+		if err != nil {
+			fmt.Printf("Error occurred while accepting connection %v", err)
+		}
+
+		go handler(conn)
+	}
+}
+
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
 	fmt.Printf("Listening at %v\n", t.Address)

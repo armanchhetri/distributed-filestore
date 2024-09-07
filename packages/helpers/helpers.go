@@ -89,6 +89,32 @@ func ReadUntil(r io.Reader, until []byte) error {
 	return nil
 }
 
+// returns with until
+func ReadUntilAndGet(r io.Reader, until []byte) ([]byte, error) {
+	br := NewByteReader(r)
+	subKey := 0
+	var readBytes []byte
+
+	for {
+		ch, err := br.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		readBytes = append(readBytes, ch)
+
+		if until[subKey] == ch {
+			subKey++
+			if subKey == len(until) {
+				break
+			}
+		} else if subKey != 0 {
+			subKey = 0
+		}
+	}
+
+	return readBytes, nil
+}
+
 func ReadUntilGetAfter(r io.Reader, until []byte) (byte, error) {
 	err := ReadUntil(r, until)
 	if err != nil {

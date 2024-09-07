@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"strings"
 	"sync"
 
 	"github.com/armanchhetri/datastore/cmd/constants"
@@ -18,7 +20,7 @@ type PutFileParam struct {
 	Filename string
 	Size     int64
 	IsReply  bool
-	ReplyId  string
+	ReplyID  string
 	HasFile  bool
 }
 
@@ -31,6 +33,7 @@ type FileServerOpts struct {
 	RootStoragePath       string
 	PathTransformFunction PathTransformFunction
 	Transport             p2p.Transport
+	Administration        p2p.Transport
 	BootstrapNodes        []string
 }
 
@@ -288,12 +291,111 @@ func (fs *FileServer) loop() {
 			log.Fatalf("Error while closing the transport (%s)", err.Error())
 		}
 	}()
+	fs.Administration.ListenAndAcceptSync(fs.AdminHandler)
+}
 
+func (fs *FileServer) SaveFile(filename string, r io.Reader) error {
+	// save locally and broadcast
+	fileKey := FileKey(filename)
+	err := fs.Store.WriteStream(fileKey, r)
+	if err != nil {
+		return err
+	}
+	stat, err := fs.Store.Stat(fileKey)
+	if err != nil {
+		return err
+	}
+
+	f, err := fs.Store.GetFile(FileKey(filename))
+	if err != nil {
+		fmt.Printf("Error on reading file for broadcasting, %v\n", err)
+		return err
+	}
+	putFileParams := PutFileParam{
+		Filename: stat.Name(),
+		Size:     stat.Size(),
+		IsReply:  false,
+	}
+
+	return fs.BroadCastFile(putFileParams, f)
+}
+
+func (fs *FileServer) AdminHandler(conn net.Conn) {
+	fmt.Printf("Admin connection from %s \n", conn.RemoteAddr().String())
 	for {
-		select {
-		case <-fs.quitch:
+		commBuf, err := helpers.ReadUntilAndGet(conn, []byte{0x00})
+		// _, err := io.ReadAtLeast(conn, commBuf, commBufSize)
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil {
+			fmt.Printf("Error while reading command %v\n", err)
+			return
+		}
+		commParam := strings.Split(string(commBuf[:len(commBuf)-1]), " ")
 
-			fmt.Println("Quiting")
+		fmt.Println(commParam)
+		command := commParam[0]
+
+		switch command {
+		case "ls":
+			var files []string
+			for key := range fs.Store.Files {
+				files = append(files, string(key))
+			}
+			output := strings.Join(files, "\n")
+			_, err := conn.Write([]byte(output))
+			if err != nil {
+				fmt.Printf("Error on ls %v\n", err)
+				return
+			}
+
+		case "write":
+			if len(commParam) < 2 {
+				_, err := conn.Write([]byte("Provide filename to write, eg: write filename"))
+				if err != nil {
+					fmt.Printf("Error on writing the connection %v\n", err)
+				}
+				return
+			}
+			filename := commParam[1]
+			err := fs.SaveFile(filename, conn)
+			if err != nil {
+				fmt.Printf("Error on writing the file %s \n", filename)
+				_, err = conn.Write([]byte("Could not save the give file"))
+				if err != nil {
+					fmt.Printf("Error on writing the connection %v\n", err)
+				}
+				return
+			}
+			_, err = fmt.Fprintf(conn, "successfully stored %s", filename)
+			if err != nil {
+				fmt.Printf("error on writing to the connection %v\n", err)
+			}
+
+		case "cat":
+			if len(commParam) < 2 {
+				_, err := conn.Write([]byte("Need to provide filename for to cat, eg: cat abc.txt"))
+				if err != nil {
+					fmt.Printf("Error on writing to the connection, %v\n", err)
+					return
+				}
+			}
+			filename := commParam[1]
+			if !fs.Store.Has(FileKey(filename)) {
+				_, err := conn.Write([]byte(fmt.Sprintf("No such file %s", filename)))
+				if err != nil {
+					fmt.Printf("Error on writing to the connection %v\n", err)
+					return
+				}
+			}
+			err := fs.Store.StreamFile(FileKey(filename), conn)
+			if err != nil {
+				fmt.Printf("Error on writing file to the connection %v", err)
+			}
+
+		default:
+			conn.Write([]byte(fmt.Sprintf("Invalid command %s", command)))
 			return
 		}
 	}

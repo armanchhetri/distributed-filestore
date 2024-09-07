@@ -85,6 +85,7 @@ func (s *FileStreamer) handleDeadLine() {
 
 type Store struct {
 	StoreOpts
+	Files map[FileKey]struct{}
 }
 
 type StoreOpts struct {
@@ -105,7 +106,8 @@ func NewStore(opts StoreOpts) *Store {
 	}
 
 	return &Store{
-		opts,
+		StoreOpts: opts,
+		Files:     make(map[FileKey]struct{}),
 	}
 }
 
@@ -142,8 +144,20 @@ func (s *Store) WriteStream(key FileKey, r io.Reader) error {
 		return err
 	}
 	log.Printf("Written %d bytes to %s file", n, filepath.FullPath())
-
+	s.Files[key] = struct{}{}
 	return nil
+}
+
+func (s *Store) GetFile(key FileKey) (*os.File, error) {
+	if !s.Has(key) {
+		return nil, fmt.Errorf("File with the key %s does not exist", key)
+	}
+	filepath := s.PathTransformFunction(key)
+	f, err := os.Open(filepath.FullPath())
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // Should call Read for the StreamReader at least once, otherwise the underlying file won't get closed
@@ -169,6 +183,8 @@ func (s *Store) Delete(key FileKey) error {
 	if err == nil {
 		log.Printf("Deleted [%s] from disk", filename.FileName)
 	}
+	delete(s.Files, key)
+
 	return err
 }
 
