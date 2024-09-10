@@ -334,7 +334,6 @@ func (fs *FileServer) AdminHandler(conn net.Conn) {
 		}
 		commParam := strings.Split(string(commBuf[:len(commBuf)-1]), " ")
 
-		fmt.Println(commParam)
 		command := commParam[0]
 
 		switch command {
@@ -383,7 +382,9 @@ func (fs *FileServer) AdminHandler(conn net.Conn) {
 			}
 			filename := commParam[1]
 			if !fs.Store.Has(FileKey(filename)) {
-				_, err := conn.Write([]byte(fmt.Sprintf("No such file %s", filename)))
+				// _, err := conn.Write([]byte(fmt.Sprintf("No such file %s", filename)))
+
+				_, err := fmt.Fprintf(conn, "No such file %s", filename)
 				if err != nil {
 					fmt.Printf("Error on writing to the connection %v\n", err)
 					return
@@ -395,7 +396,7 @@ func (fs *FileServer) AdminHandler(conn net.Conn) {
 			}
 
 		default:
-			conn.Write([]byte(fmt.Sprintf("Invalid command %s", command)))
+			fmt.Fprintf(conn, "Invalid command %s", command)
 			return
 		}
 	}
